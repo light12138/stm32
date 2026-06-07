@@ -93,7 +93,8 @@ int main(void)
   OLED_Init();
   /* USER CODE BEGIN 2 */
 
-  OLED_ShowString(0, 0, "Hello, World!", OLED_8X16);
+  OLED_ShowChar(0, 0, 'A', OLED_8X16);
+  OLED_Update();
 
   /* USER CODE END 2 */
 
