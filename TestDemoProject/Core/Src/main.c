@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "OLED.h"
+#include "Serial.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +32,10 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define ARROW_CENTER_X 64U
+#define ARROW_CENTER_Y 32U
+#define ARROW_SIZE     18U
+#define SERIAL_STARTUP_IGNORE_MS 1000U
 
 /* USER CODE END PD */
 
@@ -42,7 +47,11 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+UART_HandleTypeDef huart1;
+
 /* USER CODE BEGIN PV */
+static uint32_t led_tick = 0;
+static uint32_t serial_start_tick = 0;
 
 /* USER CODE END PV */
 
@@ -50,7 +59,10 @@ I2C_HandleTypeDef hi2c1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
+static void ProcessSerialCommand(void);
+static void ShowDirectionArrow(uint8_t command);
 
 /* USER CODE END PFP */
 
@@ -90,11 +102,14 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
-  OLED_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
-  OLED_ShowChar(0, 0, 'A', OLED_8X16);
+  OLED_Init();
+  OLED_Clear();
   OLED_Update();
+  Serial_Init();
+  serial_start_tick = HAL_GetTick();
+  Serial_SendString("USART1 ready, 115200 8N1\r\n");
 
   /* USER CODE END 2 */
 
@@ -102,10 +117,14 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      ProcessSerialCommand();
 
+    if ((HAL_GetTick() - led_tick) >= 500U)
+    {
+      led_tick = HAL_GetTick();
       HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
       HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
-      HAL_Delay(500);
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -187,6 +206,39 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -220,6 +272,85 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void ProcessSerialCommand(void)
+{
+  uint8_t command;
+
+  if ((HAL_GetTick() - serial_start_tick) < SERIAL_STARTUP_IGNORE_MS)
+  {
+    while (Serial_ReadByte(&command) != 0U)
+    {
+    }
+    return;
+  }
+
+  while (Serial_ReadByte(&command) != 0U)
+  {
+    if ((command == '\r') || (command == '\n'))
+    {
+      continue;
+    }
+
+    switch (command)
+    {
+      case '8':
+      case '4':
+      case '2':
+      case '6':
+        ShowDirectionArrow(command);
+        break;
+
+      default:
+        Serial_SendString("指令错误\r\n");
+        break;
+    }
+  }
+}
+
+static void ShowDirectionArrow(uint8_t command)
+{
+  uint8_t x = ARROW_CENTER_X;
+  uint8_t y = ARROW_CENTER_Y;
+  uint8_t size = ARROW_SIZE;
+
+  OLED_Clear();
+
+  switch (command)
+  {
+    case '8':
+      OLED_DrawLine(x, y - size, x, y + size);
+      OLED_DrawLine(x, y - size, x - 10U, y - 6U);
+      OLED_DrawLine(x, y - size, x + 10U, y - 6U);
+      Serial_SendString("UP\r\n");
+      break;
+
+    case '4':
+      OLED_DrawLine(x - size, y, x + size, y);
+      OLED_DrawLine(x - size, y, x - 6U, y - 10U);
+      OLED_DrawLine(x - size, y, x - 6U, y + 10U);
+      Serial_SendString("LEFT\r\n");
+      break;
+
+    case '2':
+      OLED_DrawLine(x, y - size, x, y + size);
+      OLED_DrawLine(x, y + size, x - 10U, y + 6U);
+      OLED_DrawLine(x, y + size, x + 10U, y + 6U);
+      Serial_SendString("DOWN\r\n");
+      break;
+
+    case '6':
+      OLED_DrawLine(x - size, y, x + size, y);
+      OLED_DrawLine(x + size, y, x + 6U, y - 10U);
+      OLED_DrawLine(x + size, y, x + 6U, y + 10U);
+      Serial_SendString("RIGHT\r\n");
+      break;
+
+    default:
+      break;
+  }
+
+  OLED_Update();
+}
 
 /* USER CODE END 4 */
 
