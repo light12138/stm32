@@ -63,6 +63,7 @@ static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static void ProcessSerialCommand(void);
 static void ShowDirectionArrow(uint8_t command);
+static void SetL298N1Pins(GPIO_PinState pin_1_1, GPIO_PinState pin_1_2);
 
 /* USER CODE END PFP */
 
@@ -257,7 +258,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LED1_Pin|LED2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, L298N_1_1_Pin|L298N_1_2_Pin|LED1_Pin|LED2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : L298N_1_1_Pin L298N_1_2_Pin */
+  GPIO_InitStruct.Pin = L298N_1_1_Pin|L298N_1_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LED1_Pin LED2_Pin */
   GPIO_InitStruct.Pin = LED1_Pin|LED2_Pin;
@@ -301,6 +309,7 @@ static void ProcessSerialCommand(void)
         break;
 
       default:
+        SetL298N1Pins(GPIO_PIN_SET, GPIO_PIN_SET);
         Serial_SendString("指令错误\r\n");
         break;
     }
@@ -318,10 +327,11 @@ static void ShowDirectionArrow(uint8_t command)
   switch (command)
   {
     case '8':
+      SetL298N1Pins(GPIO_PIN_SET, GPIO_PIN_RESET);
       OLED_DrawLine(x, y - size, x, y + size);
       OLED_DrawLine(x, y - size, x - 10U, y - 6U);
       OLED_DrawLine(x, y - size, x + 10U, y - 6U);
-      Serial_SendString("UP\r\n");
+      Serial_SendString("反转-前进\r\n");
       break;
 
     case '4':
@@ -332,10 +342,11 @@ static void ShowDirectionArrow(uint8_t command)
       break;
 
     case '2':
+      SetL298N1Pins(GPIO_PIN_RESET, GPIO_PIN_SET);
       OLED_DrawLine(x, y - size, x, y + size);
       OLED_DrawLine(x, y + size, x - 10U, y + 6U);
       OLED_DrawLine(x, y + size, x + 10U, y + 6U);
-      Serial_SendString("DOWN\r\n");
+      Serial_SendString("正转-后退\r\n");
       break;
 
     case '6':
@@ -350,6 +361,39 @@ static void ShowDirectionArrow(uint8_t command)
   }
 
   OLED_Update();
+}
+
+static void SetL298N1Pins(GPIO_PinState pin_1_1, GPIO_PinState pin_1_2)
+{
+  if (L298N_1_1_GPIO_Port == L298N_1_2_GPIO_Port)
+  {
+    uint32_t set_pins = 0U;
+    uint32_t reset_pins = 0U;
+
+    if (pin_1_1 == GPIO_PIN_SET)
+    {
+      set_pins |= L298N_1_1_Pin;
+    }
+    else
+    {
+      reset_pins |= L298N_1_1_Pin;
+    }
+
+    if (pin_1_2 == GPIO_PIN_SET)
+    {
+      set_pins |= L298N_1_2_Pin;
+    }
+    else
+    {
+      reset_pins |= L298N_1_2_Pin;
+    }
+
+    L298N_1_1_GPIO_Port->BSRR = set_pins | (reset_pins << 16U);
+    return;
+  }
+
+  HAL_GPIO_WritePin(L298N_1_1_GPIO_Port, L298N_1_1_Pin, pin_1_1);
+  HAL_GPIO_WritePin(L298N_1_2_GPIO_Port, L298N_1_2_Pin, pin_1_2);
 }
 
 /* USER CODE END 4 */
